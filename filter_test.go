@@ -52,3 +52,16 @@ func TestFilter(t *testing.T) {
 	}
 
 }
+
+func TestCase(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	filterQuery := "filter[a][_eq]=1"
+	var table Table
+
+	db = db.Where("store_id = 1")
+	db, err = Parse(filterQuery, db)
+	db.Last(&table)
+}
