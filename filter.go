@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/imiskolee/form"
-	"gorm.io/gorm"
+	"github.com/jinzhu/gorm"
 	"strings"
 )
 

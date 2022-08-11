@@ -2,7 +2,7 @@ package gorm_filter
 
 import (
 	"fmt"
-	"gorm.io/gorm"
+	"github.com/jinzhu/gorm"
 	"strconv"
 	"strings"
 )
