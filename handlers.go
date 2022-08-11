@@ -20,6 +20,7 @@ func init() {
 	handlers["_in"] = inHandler
 	handlers["_not_in"] = notInHandler
 	handlers["_null"] = nullHandler
+	handlers["_contians"] = containsHandler
 }
 
 func eqHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
@@ -82,5 +83,11 @@ func nullHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 			return db.Where(fmt.Sprintf("`%s` IS NULL", f.Field))
 		}
 		return db.Where(fmt.Sprintf("`%s` IS NOT NULL", f.Field))
+	}
+}
+
+func containsHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		return db.Where(fmt.Sprintf("(`%s` LIKE '%%?%%' AND `%s` LIKE '%%?' AND `%s` LIKE '?%%')", f.Field, f.Field, f.Field), f.Value, f.Value, f.Value)
 	}
 }
