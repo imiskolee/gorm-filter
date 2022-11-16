@@ -88,6 +88,6 @@ func nullHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 
 func containsHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(fmt.Sprintf("(`%s` LIKE '%%?%%' AND `%s` LIKE '%%?' AND `%s` LIKE '?%%')", f.Field, f.Field, f.Field), f.Value, f.Value, f.Value)
+		return db.Where(fmt.Sprintf("`%s` LIKE ?", f.Field), fmt.Sprintf("%%%s%%", f.Value))
 	}
 }
