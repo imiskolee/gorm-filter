@@ -7,10 +7,12 @@ import (
 	"strings"
 )
 
-var handlers map[string]func(*Filter) func(db *gorm.DB) *gorm.DB
+type FilterHandler func(*Filter) func(db *gorm.DB) *gorm.DB
+
+var handlers map[string]FilterHandler
 
 func init() {
-	handlers = map[string]func(*Filter) func(db *gorm.DB) *gorm.DB{}
+	handlers = map[string]FilterHandler{}
 	handlers["_eq"] = eqHandler
 	handlers["_neq"] = neqHandler
 	handlers["_gt"] = gtHandler
@@ -26,51 +28,51 @@ func init() {
 
 func eqHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(fmt.Sprintf("`%s` = ?", f.Field), f.Value)
+		return db.Where(fmt.Sprintf("`%s`.`%s` = ?", f.TableName, f.Field), f.Value)
 	}
 }
 
 func neqHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(fmt.Sprintf("`%s` != ?", f.Field), f.Value)
+		return db.Where(fmt.Sprintf("`%s`.`%s` != ?", f.TableName, f.Field), f.Value)
 	}
 }
 
 func gtHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(fmt.Sprintf("`%s` > ?", f.Field), f.Value)
+		return db.Where(fmt.Sprintf("`%s`.`%s` > ?", f.TableName, f.Field), f.Value)
 	}
 }
 
 func gteHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(fmt.Sprintf("`%s` >= ?", f.Field), f.Value)
+		return db.Where(fmt.Sprintf("`%s`.`%s` >= ?", f.TableName, f.Field), f.Value)
 	}
 }
 
 func ltHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(fmt.Sprintf("`%s` < ?", f.Field), f.Value)
+		return db.Where(fmt.Sprintf("`%s`.`%s` < ?", f.TableName, f.Field), f.Value)
 	}
 }
 
 func lteHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(fmt.Sprintf("`%s` <= ?", f.Field), f.Value)
+		return db.Where(fmt.Sprintf("`%s`.`%s` <= ?", f.TableName, f.Field), f.Value)
 	}
 }
 
 func inHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 	vals := strings.Split(f.Value, ",")
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(fmt.Sprintf("`%s` IN (?)", f.Field), vals)
+		return db.Where(fmt.Sprintf("`%s`.`%s` IN (?)", f.TableName, f.Field), vals)
 	}
 }
 
 func notInHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 	vals := strings.Split(f.Value, ",")
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(fmt.Sprintf("`%s` NOT IN (?)", f.Field), vals)
+		return db.Where(fmt.Sprintf("`%s`.`%s` NOT IN (?)", f.TableName, f.Field), vals)
 	}
 }
 
@@ -83,19 +85,18 @@ func nullHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 		if isNull {
 			return db.Where(fmt.Sprintf("`%s` IS NULL", f.Field))
 		}
-		return db.Where(fmt.Sprintf("`%s` IS NOT NULL", f.Field))
+		return db.Where(fmt.Sprintf("`%s`.`%s` IS NOT NULL", f.TableName, f.Field))
 	}
 }
 
 func containsHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(fmt.Sprintf("`%s` LIKE ?", f.Field), fmt.Sprintf("%%%s%%", f.Value))
+		return db.Where(fmt.Sprintf("`%s`.`%s` LIKE ?", f.TableName, f.Field), fmt.Sprintf("%%%s%%", f.Value))
 	}
 }
 
-
 func notContainsHandler(f *Filter) func(db *gorm.DB) *gorm.DB {
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where(fmt.Sprintf("`%s` not LIKE ?", f.Field), fmt.Sprintf("%%%s%%", f.Value))
+		return db.Where(fmt.Sprintf("`%s`.`%s` not LIKE ?", f.TableName, f.Field), fmt.Sprintf("%%%s%%", f.Value))
 	}
 }

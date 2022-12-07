@@ -12,6 +12,18 @@ type Table struct {
 	B  int
 	C  int
 	D  int
+	E  int
+}
+
+type TableB struct {
+	ID int
+	A  int
+	B  int
+	C  int
+}
+
+func (t *TableB) TableName() string {
+	return "table_b"
 }
 
 func (t *Table) TableName() string {
@@ -19,11 +31,11 @@ func (t *Table) TableName() string {
 }
 
 func TestFilter(t *testing.T) {
-	db, err := gorm.Open("sqlite3", "test.db")
+	db, err := gorm.Open("sqlite3", "test1.db")
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.AutoMigrate(&Table{})
+	db.AutoMigrate(&Table{}, &TableB{})
 
 	cases := map[string]string{
 		"filter[a][_eq]=a":     "SELECT * FROM `table` WHERE `a` = \"a\"",
@@ -35,23 +47,44 @@ func TestFilter(t *testing.T) {
 	}
 
 	for c, _ := range cases {
-		parsedDB, err := Parse(c, db.Debug().Table("table"))
+		runner, err := NewFilterDSL(c, "table", db)
+		if err != nil {
+			t.Fatal(err)
+		}
+		parsedDB, err := runner.Run()
 		if err != nil {
 			t.Fatal(err)
 		}
 		var lst []Table
-		parsedDB.Find(&lst)
+		if err := parsedDB.Debug().Find(&lst).Error; err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
-func TestCase(t *testing.T) {
-	db, err := gorm.Open("sqlite", "test.db")
+func TestJoinCase(t *testing.T) {
+	dsl := "filter[a][_eq]=a&filter[bc][_eq]=1"
+	db, err := gorm.Open("sqlite3", "test1.db")
 	if err != nil {
 		t.Fatal(err)
 	}
-	filterQuery := "filter[a][_eq]=1"
-	var table Table
-	db = db.Where("store_id = 1")
-	db, err = Parse(filterQuery, db)
-	db.Last(&table)
+	db.AutoMigrate(&Table{}, &TableB{})
+	runner, err := NewFilterDSL(dsl, "table", db)
+	runner.Register("bc", func(f *Filter) func(db *gorm.DB) *gorm.DB {
+		return func(db *gorm.DB) *gorm.DB {
+			newF := f.Copy()
+			newF.TableName = "table_b"
+			newF.Field = "c"
+			db = db.Joins("LEFT JOIN table_b on table_b.a = `table`.id")
+			return newF.Run(db)
+		}
+	})
+	parsedDB, err := runner.Run()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lst []Table
+	if err := parsedDB.Debug().Find(&lst).Error; err != nil {
+		t.Fatal(err)
+	}
 }
