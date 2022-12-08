@@ -9,12 +9,27 @@ import (
 )
 
 type Filter struct {
-	Field string
-	OP    string
-	Value string
+	TableName string
+	Field     string
+	OP        string
+	Value     string
+	db        *gorm.DB
+	Handler   FilterHandler
 }
 
+func (f *Filter) Copy() Filter {
+	return Filter{
+		Field:     f.Field,
+		TableName: f.TableName,
+		OP:        f.OP,
+		Value:     f.Value,
+	}
+}
 func (f *Filter) Run(db *gorm.DB) *gorm.DB {
+	f.db = db
+	if f.Handler != nil {
+		return f.Handler(f)(db)
+	}
 	handler, ok := handlers[strings.ToLower(f.OP)]
 	if !ok {
 		panic(fmt.Sprintf("Can not support op `%s`", f.OP))
@@ -22,20 +37,65 @@ func (f *Filter) Run(db *gorm.DB) *gorm.DB {
 	return handler(f)(db)
 }
 
-func Parse(queryString string, db *gorm.DB) (*gorm.DB, error) {
-	form := form.NewForm(queryString)
+type FilterRunner struct {
+	filters   []Filter
+	TableName string
+	queryDSL  string
+	db        *gorm.DB
+}
+
+func NewFilterDSL(queryDSL string, tableName string, db *gorm.DB) (*FilterRunner, error) {
+	s := &FilterRunner{
+		queryDSL:  queryDSL,
+		db:        db.Table(tableName),
+		TableName: tableName,
+	}
+	if err := s.parse(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func (s *FilterRunner) Register(field string, handler FilterHandler) *FilterRunner {
+	for k, f := range s.filters {
+		if f.Field == field {
+			f.Handler = handler
+			s.filters[k] = f
+		}
+	}
+	return s
+}
+
+func (s *FilterRunner) Run() (*gorm.DB, error) {
+	for _, filter := range s.filters {
+		s.db = filter.Run(s.db)
+	}
+	return s.db, nil
+}
+
+func (s *FilterRunner) Get(field string) (Filter, bool) {
+	for _, filter := range s.filters {
+		if filter.Field == field {
+			return filter, true
+		}
+	}
+	return Filter{}, false
+}
+
+func (s *FilterRunner) parse() error {
+	form := form.NewForm(s.queryDSL)
 	form.NeedQueryUnescape(true)
 	data, err := form.Decode()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	filters, ok := data["filter"]
 	if !ok {
-		return db, nil
+		return nil
 	}
 	filterConverter, ok := filters.(map[string]interface{})
 	if !ok {
-		return nil, errors.New("can not parse filter DSL")
+		return errors.New("can not parse filter DSL")
 	}
 	var filtersDSL []Filter
 	for k, v := range filterConverter {
@@ -45,6 +105,7 @@ func Parse(queryString string, db *gorm.DB) (*gorm.DB, error) {
 		if !ok {
 			f.OP = "_eq"
 			f.Value = fmt.Sprint(v)
+			f.TableName = s.TableName
 			filtersDSL = append(filtersDSL, f)
 			continue
 		}
@@ -52,13 +113,11 @@ func Parse(queryString string, db *gorm.DB) (*gorm.DB, error) {
 			var f Filter
 			f.Field = k
 			f.OP = op
+			f.TableName = s.TableName
 			f.Value = fmt.Sprint(val)
 			filtersDSL = append(filtersDSL, f)
 		}
 	}
-
-	for _, filter := range filtersDSL {
-		db = filter.Run(db)
-	}
-	return db, nil
+	s.filters = filtersDSL
+	return nil
 }
