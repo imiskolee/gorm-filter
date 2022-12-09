@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"strings"
 	"testing"
 )
-
 
 type Table struct {
 	ID int
@@ -66,7 +66,7 @@ func TestFilter(t *testing.T) {
 }
 
 func TestJoinCase(t *testing.T) {
-	dsl := "filter[a][_eq]=a&filter[bc][_eq]=1&filter[search][_contains]=10"
+	dsl := "filter[a][_eq]=a&filter[bc][_eq]=1&filter[search][_contains]=10&filter[directus.a][_contains]=a&filter[directus.b][_contains]=b"
 	db, err := gorm.Open(sqlite.Open("test.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -92,6 +92,21 @@ func TestJoinCase(t *testing.T) {
 		}
 	})
 
+	runner.RegisterGroup("directus", func(gr *GroupRunner) func(db *gorm.DB) *gorm.DB {
+		var direcuts []string
+		for _, f := range gr.filters {
+			direcuts = append(direcuts, f.Field)
+		}
+		return func(db *gorm.DB) *gorm.DB {
+			db = db.Where("c in (?)", direcuts)
+			return db
+		}
+	}, func(s string) bool {
+		if strings.HasPrefix(s, "directus") {
+			return true
+		}
+		return false
+	})
 	parsedDB, err := runner.Run()
 	if err != nil {
 		t.Fatal(err)
