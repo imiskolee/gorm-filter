@@ -37,24 +37,35 @@ func (f *Filter) Run(db *gorm.DB) *gorm.DB {
 	return handler(f)(db)
 }
 
+type FiltersHandler func(*GroupRunner) func(db *gorm.DB) *gorm.DB
+
 type FilterRunner struct {
-	filters   []Filter
-	TableName string
-	queryDSL  string
-	db        *gorm.DB
+	filters      []*Filter
+	TableName    string
+	queryDSL     string
+	db           *gorm.DB
+	groupHandles map[string]*GroupRunner
+}
+
+type GroupRunner struct {
+	filters []*Filter
+	handel  FiltersHandler
 }
 
 func NewFilterDSL(queryDSL string, tableName string, db *gorm.DB) (*FilterRunner, error) {
 	s := &FilterRunner{
-		queryDSL:  queryDSL,
-		db:        db.Table(tableName),
-		TableName: tableName,
+		queryDSL:     queryDSL,
+		db:           db.Table(tableName),
+		TableName:    tableName,
+		groupHandles: make(map[string]*GroupRunner),
 	}
 	if err := s.parse(); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
+
+type FieldGroupRule func(string) bool
 
 func (s *FilterRunner) Register(field string, handler FilterHandler) *FilterRunner {
 	for k, f := range s.filters {
@@ -66,9 +77,32 @@ func (s *FilterRunner) Register(field string, handler FilterHandler) *FilterRunn
 	return s
 }
 
+func (s *FilterRunner) RegisterGroup(groupField string, handler FiltersHandler, groupFilter ...FieldGroupRule) *FilterRunner {
+	for k, f := range s.filters {
+		if f != nil && (len(groupFilter) > 0 && groupFilter[0](f.Field) || groupField == f.Field) {
+			groupHandle, ok := s.groupHandles[groupField]
+			if !ok {
+				groupHandle = &GroupRunner{
+					filters: []*Filter{f},
+					handel:  handler,
+				}
+				s.groupHandles[groupField] = groupHandle
+			} else {
+				s.groupHandles[groupField].filters = append(groupHandle.filters, f)
+			}
+			s.filters[k] = nil
+		}
+	}
+	return s
+}
 func (s *FilterRunner) Run() (*gorm.DB, error) {
 	for _, filter := range s.filters {
-		s.db = filter.Run(s.db)
+		if filter != nil {
+			s.db = filter.Run(s.db)
+		}
+	}
+	for _, group := range s.groupHandles {
+		s.db = group.handel(group)(s.db)
 	}
 	return s.db, nil
 }
@@ -76,7 +110,7 @@ func (s *FilterRunner) Run() (*gorm.DB, error) {
 func (s *FilterRunner) Get(field string) (Filter, bool) {
 	for _, filter := range s.filters {
 		if filter.Field == field {
-			return filter, true
+			return *filter, true
 		}
 	}
 	return Filter{}, false
@@ -97,9 +131,9 @@ func (s *FilterRunner) parse() error {
 	if !ok {
 		return errors.New("can not parse filter DSL")
 	}
-	var filtersDSL []Filter
+	var filtersDSL []*Filter
 	for k, v := range filterConverter {
-		var f Filter
+		f := &Filter{}
 		f.Field = k
 		val, ok := v.(map[string]interface{})
 		if !ok {
@@ -110,7 +144,7 @@ func (s *FilterRunner) parse() error {
 			continue
 		}
 		for op, val := range val {
-			var f Filter
+			f := &Filter{}
 			f.Field = k
 			f.OP = op
 			f.TableName = s.TableName

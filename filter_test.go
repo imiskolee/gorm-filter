@@ -1,8 +1,10 @@
 package gorm_filter
 
 import (
+	"fmt"
 	"github.com/jinzhu/gorm"
 	_ "github.com/jinzhu/gorm/dialects/sqlite"
+	"strings"
 	"testing"
 )
 
@@ -35,7 +37,7 @@ func TestFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.AutoMigrate(&Table{}, &TableB{})
+	db.AutoMigrate(&Table{})
 
 	cases := map[string]string{
 		"filter[a][_eq]=a":     "SELECT * FROM `table` WHERE `a` = \"a\"",
@@ -60,14 +62,16 @@ func TestFilter(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
 }
 
 func TestJoinCase(t *testing.T) {
-	dsl := "filter[a][_eq]=a&filter[bc][_eq]=1"
+	dsl := "filter[a][_eq]=a&filter[bc][_eq]=1&filter[search][_contains]=10&filter[directus.a][_contains]=a&filter[directus.b][_contains]=b"
 	db, err := gorm.Open("sqlite3", "test1.db")
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	db.AutoMigrate(&Table{}, &TableB{})
 	runner, err := NewFilterDSL(dsl, "table", db)
 	runner.Register("bc", func(f *Filter) func(db *gorm.DB) *gorm.DB {
@@ -79,12 +83,37 @@ func TestJoinCase(t *testing.T) {
 			return newF.Run(db)
 		}
 	})
+
+	runner.Register("search", func(filter *Filter) func(db *gorm.DB) *gorm.DB {
+		return func(db *gorm.DB) *gorm.DB {
+			db = db.Where(fmt.Sprintf("`%s`.`%s` LIKE ?", filter.TableName, "b"), fmt.Sprintf("%%%s%%", filter.Value))
+			db = db.Where(fmt.Sprintf("`%s`.`%s` LIKE ?", "table_b", "b"), fmt.Sprintf("%%%s%%", filter.Value))
+			return db
+		}
+	})
+
+	runner.RegisterGroup("directus", func(gr *GroupRunner) func(db *gorm.DB) *gorm.DB {
+		var direcuts []string
+		for _, f := range gr.filters {
+			direcuts = append(direcuts, f.Field)
+		}
+		return func(db *gorm.DB) *gorm.DB {
+			db = db.Where("c in (?)", direcuts)
+			return db
+		}
+	}, func(s string) bool {
+		if strings.HasPrefix(s, "directus") {
+			return true
+		}
+		return false
+	})
 	parsedDB, err := runner.Run()
 	if err != nil {
 		t.Fatal(err)
 	}
 	var lst []Table
-	if err := parsedDB.Debug().Find(&lst).Error; err != nil {
+	if err := parsedDB.Select("`table`.*,table_b.*").Debug().Find(&lst).Error; err != nil {
 		t.Fatal(err)
 	}
+	//select * from table left join table_b on table_b.a=`table`.id where table.a="a" and table_b.c=1 and table_b.b like '%10%' and table_b.a like '%10%'
 }
