@@ -48,7 +48,7 @@ type FilterRunner struct {
 }
 
 type GroupRunner struct {
-	filters []*Filter
+	Filters []*Filter
 	handel  FiltersHandler
 }
 
@@ -83,12 +83,12 @@ func (s *FilterRunner) RegisterGroup(groupField string, handler FiltersHandler, 
 			groupHandle, ok := s.groupHandles[groupField]
 			if !ok {
 				groupHandle = &GroupRunner{
-					filters: []*Filter{f},
+					Filters: []*Filter{f},
 					handel:  handler,
 				}
 				s.groupHandles[groupField] = groupHandle
 			} else {
-				s.groupHandles[groupField].filters = append(groupHandle.filters, f)
+				s.groupHandles[groupField].Filters = append(groupHandle.Filters, f)
 			}
 			s.filters[k] = nil
 		}
