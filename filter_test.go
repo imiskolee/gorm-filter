@@ -94,7 +94,7 @@ func TestJoinCase(t *testing.T) {
 
 	runner.RegisterGroup("directus", func(gr *GroupRunner) func(db *gorm.DB) *gorm.DB {
 		var direcuts []string
-		for _, f := range gr.filters {
+		for _, f := range gr.Filters {
 			direcuts = append(direcuts, f.Field)
 		}
 		return func(db *gorm.DB) *gorm.DB {
